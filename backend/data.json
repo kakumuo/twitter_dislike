@@ -155,11 +155,11 @@
   "dislikedBy": {
    "KevinAkmuo": {
     "ownerId": "KevinAkmuo",
-    "dislikeDate": 1763173698
+    "dislikeDate": 1763174288
    }
   },
   "createdAt": 1763173693,
-  "updatedAt": 1763173698
+  "updatedAt": 1763174288
  },
  "1989415127960187250": {
   "ownerId": "VHSdogs",
@@ -179,6 +179,18 @@
   "dislikedBy": {},
   "createdAt": 1763173346,
   "updatedAt": 1763173363
+ },
+ "1989447743811793116": {
+  "ownerId": "KyleKulinski",
+  "tweetId": "1989447743811793116",
+  "dislikedBy": {
+   "KevinAkmuo": {
+    "ownerId": "KevinAkmuo",
+    "dislikeDate": 1763174295
+   }
+  },
+  "createdAt": 1763174295,
+  "updatedAt": 1763174295
  },
  "1989511643026657518": {
   "ownerId": "iGumdrop",

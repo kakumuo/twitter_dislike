@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+dist_old
+
+# backend
+/backend/tmp
+/backend/.air.toml
+/backend/config.json
+/backend/data.json

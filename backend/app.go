@@ -1,125 +1,86 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"time"
+
+	// "github.com/rs/cors"
 
 	"github.com/rs/cors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type DislikeRecord struct {
-	OwnerId    string `json:"ownerId"`
-	DislikedAt int    `json:"dislikeDate"`
+	OwnerId   string `bson:"ownerId"`
+	UpdatedAt int    `bson:"updatedAt,$date"`
 }
 
 type TweetRecord struct {
-	OwnerId   string                   `json:"ownerId"`
-	TweetId   string                   `json:"tweetId"`
-	DislikeBy map[string]DislikeRecord `json:"dislikedBy"`
-	CreatedAt int                      `json:"createdAt"`
-	UpdatedAt int                      `json:"updatedAt"`
+	OwnerId   string                   `bson:"ownerId"`
+	TweetId   string                   `bson:"tweetId"`
+	DislikeBy map[string]DislikeRecord `bson:"dislikedBy"`
+	CreatedAt int                      `bson:"createdAt,$date"`
+	UpdatedAt int                      `bson:"updatedAt,$date"`
+}
+
+type Config struct {
+	ConnectionString string `bson:"connectionString"`
+	UserName         string `bson:"username"`
+	Password         string `bson:"password"`
+	HostName         string `bson:"hostname"`
+	Port             int    `bson:"port"`
 }
 
 const HOST = "127.0.0.1"
 const PORT = 8888
 const FILE_PATH = "./data.json"
 
+var coll *mongo.Collection
+
 // TODO: move functionality to mongodb
 func main() {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /tweet/dislike", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		tweetId, profileId := r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
-		outputObj := make(map[string]any)
+	var dislikeWriter DBDislikeWriter
+	config := LoadConfig("./config.json")
 
-		defer func() {
-			outputData, _ := json.MarshalIndent(outputObj, "", " ")
-			fmt.Fprintf(w, "%s", string(outputData))
-		}()
-
-		fileData, err := os.ReadFile(FILE_PATH)
-		if err != nil {
-			outputObj["error"] = fmt.Sprintf("%s %s <<%s>>", "Could not open file", FILE_PATH, err.Error())
-			log.Fatal(outputObj)
+	dislikeWriter = NewDBDislikeWriter(config.ConnectionString)
+	defer func() {
+		if err := dislikeWriter.Client.Disconnect(context.TODO()); err != nil {
+			log.Fatal("Error while disconnecting from mongo instance:", err.Error())
 		}
+	}()
 
-		fileDataObj := make(map[string]TweetRecord)
-		err = json.Unmarshal(fileData, &fileDataObj)
-		if err != nil {
-			outputObj["error"] = fmt.Sprintf("%s %s <<%s>>", "Could not parse data file", FILE_PATH, err.Error())
-			log.Fatal(outputObj)
-		}
+	mux.HandleFunc("GET /tweet/dislike", dislikeWriter.HandleGetDislikes)
+	mux.HandleFunc("POST /tweet/dislike", dislikeWriter.HandlePostDislikes)
 
-		outputObj["dislikeCount"] = len(fileDataObj[tweetId].DislikeBy)
-		outputObj["tweetId"] = tweetId
-		outputObj["userDislike"] = false
-
-		if _, ok := fileDataObj[tweetId].DislikeBy[profileId]; ok {
-			outputObj["userDislike"] = true
-		}
-	})
-
-	// localhost:8888/tweet/dislike?ownerId=ThongWeeDaphne&tweetId=1988856015710834969&profileId=KevinAkmuo
-	mux.HandleFunc("POST /tweet/dislike", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		ownerId, tweetId, profileId := r.URL.Query().Get("ownerId"), r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
-		outputObj := make(map[string]any)
-		log.Printf("Disliking tweet... {disliker: %s, tweetId: %s, tweetOwner: %s}\n", profileId, tweetId, ownerId)
-
-		defer func() {
-			outputData, _ := json.MarshalIndent(outputObj, "", " ")
-			fmt.Fprintf(w, "%s", string(outputData))
-		}()
-
-		fileData, err := os.ReadFile(FILE_PATH)
-		if err != nil {
-			outputObj["error"] = fmt.Sprintf("%s %s <<%s>>", "Could not open file", FILE_PATH, err.Error())
-			log.Fatal(outputObj)
-		}
-
-		fileDataObj := make(map[string]TweetRecord)
-		err = json.Unmarshal(fileData, &fileDataObj)
-		if err != nil {
-			outputObj["error"] = fmt.Sprintf("%s %s <<%s>>", "Could not parse data file", FILE_PATH, err.Error())
-			log.Fatal(outputObj)
-		}
-
-		timeStamp := int(time.Now().Unix())
-		if _, ok := fileDataObj[tweetId]; !ok {
-			fileDataObj[tweetId] = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
-		}
-
-		tweetRecord := fileDataObj[tweetId]
-		tweetRecord.UpdatedAt = timeStamp
-		fileDataObj[tweetId] = tweetRecord
-		dislikeByMap := tweetRecord.DislikeBy
-		if _, ok := dislikeByMap[profileId]; !ok {
-			dislikeByMap[profileId] = DislikeRecord{OwnerId: profileId, DislikedAt: timeStamp}
-		} else {
-			delete(dislikeByMap, profileId)
-		}
-
-		fileDataStr, _ := json.MarshalIndent(fileDataObj, "", " ")
-		os.WriteFile(FILE_PATH, fileDataStr, os.ModeAppend|os.ModePerm)
-
-		outputObj["dislikeCount"] = len(fileDataObj[tweetId].DislikeBy)
-		outputObj["tweetId"] = tweetId
-		outputObj["userDislike"] = false
-
-		if _, ok := fileDataObj[tweetId].DislikeBy[profileId]; ok {
-			outputObj["userDislike"] = true
-		}
-	})
-
-	endpoint := fmt.Sprintf("%s:%d", HOST, PORT)
+	// start server
 	corsHandler := cors.AllowAll().Handler(mux)
-	log.Println("Starting server at:", endpoint)
-	log.Fatal(http.ListenAndServe(endpoint, corsHandler))
+	serverEndpoint := fmt.Sprintf("%s:%d", config.HostName, config.Port)
+	log.Println("Starting server at:", serverEndpoint)
+	log.Fatal(http.ListenAndServe(serverEndpoint, corsHandler))
+}
+
+func LoadConfig(filepath string) *Config {
+	res := &Config{}
+
+	fileData, err := os.ReadFile(filepath)
+
+	if err != nil {
+		log.Fatal("Error: ", err.Error())
+	}
+
+	err = json.Unmarshal(fileData, res)
+
+	if err != nil {
+		log.Fatal("Unable to read config json file:", err.Error())
+	}
+
+	return res
 }
 
 /*
