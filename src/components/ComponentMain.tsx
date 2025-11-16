@@ -26,38 +26,10 @@ export function DislikeButton(props:{tweetInfo:TweetInfo}) {
 	const [colorHoverHalo] = React.useState("#c043fa26")
 	const [hover, setHover] = React.useState(false)
 	
-	React.useEffect(() => {
-		console.debug("Creating component for: ", props.tweetInfo)
-		const handlePollDislikes = async () => {
-			const resp = await Browser.runtime.sendMessage<APIMessage, APIResponse>({
-				action: 'get', 
-				data: props.tweetInfo
-			})
 
-			if("error" in resp) {
-				console.error("Failed to like tweet: ", resp.error)
-			} else if ("dislikeCount" in resp) {
-				setCount(resp.dislikeCount)
-			}
-		}
-		handlePollDislikes()
-
-		
-		// const interval = setInterval(handlePollDislikes, DISLIKE_POLL_RATE_MS)
-
-		// return () => {
-		// 	console.debug("Removing element: ", props.tweetInfo)
-		// 	clearInterval(interval)
-		// }
-
-		return() => {
-			console.debug("Removing component", props.tweetInfo)
-		}
-	}, [])
-
-	const handleClick = async () => {
+	const handleTweetDislikes = async (method: 'get' | 'upsert') => {
 		const resp = await Browser.runtime.sendMessage<APIMessage, APIResponse>({
-			action: 'upsert', 
+			action: method,
 			data: props.tweetInfo
 		})
 
@@ -69,7 +41,12 @@ export function DislikeButton(props:{tweetInfo:TweetInfo}) {
 		}
 	}
 
-	return <button className={CLASS_BUTTON} onClick={handleClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+	React.useEffect(() => {
+		console.debug("Creating component for: ", props.tweetInfo)
+		handleTweetDislikes('get')
+	}, [])
+
+	return <button data-testid="dislike" className={CLASS_BUTTON} onClick={() => handleTweetDislikes('upsert')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
 			<div className={CLASS_BUTTON_DIV} style={{color: hover || dislike ? colorHover : colorDefault}} dir="ltr" >
 				{/* Icon */}
 				<div className={CLASS_ICON_DIV}>
