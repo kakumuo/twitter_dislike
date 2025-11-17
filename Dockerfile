@@ -9,4 +9,4 @@ COPY backend/dislikes ./dislikes
 
 RUN go build -o twitter-plus-backend
 
-CMD ["/twitter-plus-backend"]
+CMD ["twitter-plus-backend"]

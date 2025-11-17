@@ -117,7 +117,7 @@ func (writer DataStoreDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r 
 	w.Header().Set("Content-Type", "application/json")
 	tweetId, profileId := r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
 	apiResponse := APIResponse{}
-	log.Printf("Disliking tweet... {disliker: %s, tweetId: %s}\n", profileId, tweetId)
+	log.Printf("Getting Dislike... {disliker: %s, tweetId: %s}\n", profileId, tweetId)
 
 	defer func() {
 		outputData, _ := json.MarshalIndent(apiResponse, "", " ")
