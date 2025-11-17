@@ -4,28 +4,20 @@ import {DislikeButton} from "./components/ComponentMain";
 
 
 const SELECT_TIMELINE_PARENT = 'css-175oi2r'
-// const CLASS_MORE_OPTIONS_GROUP = "css-175oi2r r-1awozwy r-18u37iz r-1cmwbt1 r-1wtj0ep"
-// const CLASS_MORE_OPTIONS_ITEM = "css-175oi2r r-18u37iz"
-
 const timelineParent = document.querySelector<HTMLDivElement>(`div[class*="${SELECT_TIMELINE_PARENT}"`)
 const timelineButtonMap:WeakMap<HTMLDivElement, HTMLDivElement> = new WeakMap()
 
 const observer = new MutationObserver((mutationsList) => {
   mutationsList.forEach((mutation) => {
     mutation.addedNodes.forEach((node) => {
-		// const element:HTMLDivElement = node as HTMLDivElement
-        // if(element.classList.contains("css-175oi2r") && element.classList.length == 1) {
-		// 	const buttonElement = addDislikeButton(element)
-        //     timelineButtonMap.set(element, buttonElement)
-		// }
-
         const element:HTMLDivElement = node as HTMLDivElement
-        const likeButton = element.querySelector<HTMLButtonElement>('button[data-testid="like"]')
-            // data-testid="cellInnerDiv"
-        if(likeButton && element.classList.contains("css-175oi2r") && element.getAttribute("data-testid") == "cellInnerDiv") {
+        let targetLikeButton = element.querySelector<HTMLButtonElement>('button[data-testid="like"]')
+        targetLikeButton = targetLikeButton ? targetLikeButton : element.querySelector<HTMLButtonElement>('button[data-testid="unlike"]')
+            
+        if(targetLikeButton && element.classList.contains("css-175oi2r") && element.getAttribute("data-testid") == "cellInnerDiv") {
             const tweetInfo = getTweetInfo(element)
             console.debug(element)
-            addDislikeButton(likeButton, tweetInfo)
+            addDislikeButton(targetLikeButton, tweetInfo)
         }
     });
 
