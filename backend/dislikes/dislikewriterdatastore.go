@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -26,13 +27,25 @@ type DataStoreDislikeWriter struct {
 func NewDataStoreDislikeWriter() DataStoreDislikeWriter {
 	ctx := context.Background()
 
+	var projId string
+	envVars := []string{"DEVSHELL_PROJECT_ID", "GOOGLE_CLOUD_PROJECT_ID"}
+	for _, envVar := range envVars {
+		projId = os.Getenv(envVar)
+		if projId != "" {
+			break
+		}
+	}
+
+	if projId == "" {
+		projId = "twitter-plus-38c93"
+	}
+
 	// Create a datastore client. In a typical application, you would create
 	// a single client which is reused for every datastore operation.
-	dsClient, err := datastore.NewClient(ctx, "my-project")
+	dsClient, err := datastore.NewClient(ctx, projId)
 	if err != nil {
 		log.Fatal("Unable to create datastore:", err.Error())
 	}
-	defer dsClient.Close()
 
 	return DataStoreDislikeWriter{
 		Context:  &ctx,
@@ -40,38 +53,44 @@ func NewDataStoreDislikeWriter() DataStoreDislikeWriter {
 	}
 }
 
-func (writer DataStoreDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *http.Request) {
+func (writer DataStoreDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	ownerId, tweetId, profileId := r.URL.Query().Get("ownerId"), r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
-	outputObj := make(map[string]any)
+	apiResponse := APIResponse{}
 	log.Printf("Disliking tweet... {disliker: %s, tweetId: %s, tweetOwner: %s}\n", profileId, tweetId, ownerId)
 
 	defer func() {
-		outputData, _ := json.MarshalIndent(outputObj, "", " ")
+		outputData, _ := json.MarshalIndent(apiResponse, "", " ")
 		fmt.Fprintf(w, "%s", string(outputData))
 	}()
 
 	_, err := writer.DSClient.RunInTransaction(*writer.Context, func(tx *datastore.Transaction) error {
-		filter := datastore.NameKey("TweetRecord", "tweetId", nil)
+		tweetKey := datastore.NameKey("TweetRecord", tweetId, nil)
 		timeStamp := int(time.Now().Unix())
 		var tweetRecord TweetRecord
 
-		err := tx.Get(filter, &tweetRecord)
+		err := tx.Get(tweetKey, &tweetRecord)
 		if err == datastore.ErrNoSuchEntity {
-			tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
+			tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, CreatedAt: timeStamp, UpdatedAt: timeStamp}
+			tx.Put(tweetKey, &tweetRecord)
 		} else if err != nil {
 			return err
 		}
 
-		tweetRecord.UpdatedAt = timeStamp
-		dislikeByMap := tweetRecord.DislikeBy
-		if _, ok := dislikeByMap[profileId]; !ok {
-			dislikeByMap[profileId] = DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp}
-		} else {
-			delete(dislikeByMap, profileId)
-		}
-
-		if _, err := tx.Put(filter, &tweetRecord); err != nil {
+		dislikeKey := datastore.NameKey("DislikeRecord", profileId, tweetKey)
+		var dislikeRec DislikeRecord
+		err = tx.Get(dislikeKey, &dislikeRec)
+		switch err {
+		case datastore.ErrNoSuchEntity:
+			dislikeRec = DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp}
+			_, err = tx.Put(dislikeKey, &dislikeRec)
+			if err != nil {
+				return err
+			}
+			apiResponse.UserDislike = true
+		case nil:
+			tx.Delete(dislikeKey)
+		default:
 			return err
 		}
 
@@ -79,113 +98,49 @@ func (writer DataStoreDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r 
 	})
 
 	if err != nil {
-		log.Fatalln("Error while running transaction", err.Error())
-	}
-}
-
-func (writer DataStoreDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	ownerId, tweetId, profileId := r.URL.Query().Get("ownerId"), r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
-	outputObj := make(map[string]any)
-	log.Printf("Disliking tweet... {disliker: %s, tweetId: %s, tweetOwner: %s}\n", profileId, tweetId, ownerId)
-
-	defer func() {
-		outputData, _ := json.MarshalIndent(outputObj, "", " ")
-		fmt.Fprintf(w, "%s", string(outputData))
-	}()
-
-	filter := datastore.NameKey("TweetRecord", "tweetId", nil)
-	timeStamp := int(time.Now().Unix())
-	var tweetRecord TweetRecord
-
-	err := writer.DSClient.Get((*writer.Context), filter, tweetRecord)
-	if err == datastore.ErrNoSuchEntity {
-		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
-	} else if err != nil {
-		log.Fatal("Uanble to query entity:", err.Error())
+		log.Fatalln("Error while running transaction =>", err.Error())
 	}
 
-	parseDataResponse(&outputObj, &tweetRecord, profileId)
-}
+	tweetKey := datastore.NameKey("TweetRecord", tweetId, nil)
+	countQuery := datastore.NewQuery("DislikeRecord").Ancestor(tweetKey)
+	n, err := writer.DSClient.Count(*writer.Context, countQuery)
 
-/*
-
-func (writer MongoDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	ownerId, tweetId, profileId := r.URL.Query().Get("ownerId"), r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
-	outputObj := make(map[string]any)
-	log.Printf("Disliking tweet... {disliker: %s, tweetId: %s, tweetOwner: %s}\n", profileId, tweetId, ownerId)
-
-	defer func() {
-		outputData, _ := json.MarshalIndent(outputObj, "", " ")
-		fmt.Fprintf(w, "%s", string(outputData))
-	}()
-
-	filter := bson.D{{"tweetId", tweetId}}
-	cursor := writer.Coll.FindOne(context.TODO(), filter)
-	err := cursor.Err()
-	var tweetRecord TweetRecord
-
-	timeStamp := int(time.Now().Unix())
-
-	if err == mongo.ErrNoDocuments {
-		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
-	} else if err != nil {
-		log.Fatal("Uanble to query document:", err.Error())
-	} else {
-		cursor.Decode(&tweetRecord)
-	}
-
-	tweetRecord.UpdatedAt = timeStamp
-	dislikeByMap := tweetRecord.DislikeBy
-	if _, ok := dislikeByMap[profileId]; !ok {
-		dislikeByMap[profileId] = DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp}
-	} else {
-		delete(dislikeByMap, profileId)
-	}
-
-	filter = bson.D{{"tweetId", tweetId}}
-	update := bson.D{{"$set", tweetRecord}}
-	opts := options.UpdateOne().SetUpsert(true)
-
-	result, err := writer.Coll.UpdateOne(context.TODO(), filter, update, opts)
 	if err != nil {
-		log.Fatal("Unable to update document:", err.Error())
+		log.Fatal("Unable to count records:", err.Error())
 	}
 
-	log.Printf("Number of documents updated: %v\n", result.ModifiedCount)
-	log.Printf("Number of documents upserted: %v\n", result.UpsertedCount)
-
-	parseDataResponse(&outputObj, &tweetRecord, profileId)
+	apiResponse.DislikeCount = n
+	apiResponse.TweetId = tweetId
 }
 
-func (writer MongoDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *http.Request) {
+func (writer DataStoreDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	ownerId, tweetId, profileId := r.URL.Query().Get("ownerId"), r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
-	outputObj := make(map[string]any)
-	log.Printf("Disliking tweet... {disliker: %s, tweetId: %s, tweetOwner: %s}\n", profileId, tweetId, ownerId)
+	tweetId, profileId := r.URL.Query().Get("tweetId"), r.URL.Query().Get("profileId")
+	apiResponse := APIResponse{}
+	log.Printf("Disliking tweet... {disliker: %s, tweetId: %s}\n", profileId, tweetId)
 
 	defer func() {
-		outputData, _ := json.MarshalIndent(outputObj, "", " ")
+		outputData, _ := json.MarshalIndent(apiResponse, "", " ")
 		fmt.Fprintf(w, "%s", string(outputData))
 	}()
 
-	filter := bson.D{{"tweetId", tweetId}}
-	cursor := writer.Coll.FindOne(context.TODO(), filter)
-	err := cursor.Err()
-	var tweetRecord TweetRecord
+	tweetKey := datastore.NameKey("TweetRecord", tweetId, nil)
+	dislikeKey := datastore.NameKey("DislikeRecord", profileId, tweetKey)
 
-	timeStamp := int(time.Now().Unix())
+	hasDislikeQuery := datastore.NewQuery("DislikeRecord").FilterField("__key__", "=", dislikeKey)
+	n, err := writer.DSClient.Count(*writer.Context, hasDislikeQuery)
 
-	if err == mongo.ErrNoDocuments {
-		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
-	} else if err != nil {
-		log.Fatal("Uanble to query document:", err.Error())
-	} else {
-		cursor.Decode(&tweetRecord)
+	if err != nil {
+		log.Fatal("Unable to count user dislike:", err.Error())
 	}
+	apiResponse.UserDislike = n > 0
 
-	parseDataResponse(&outputObj, &tweetRecord, profileId)
+	countQuery := datastore.NewQuery("DislikeRecord").Ancestor(tweetKey)
+	n, err = writer.DSClient.Count(*writer.Context, countQuery)
+
+	if err != nil {
+		log.Fatal("Unable to count records:", err.Error())
+	}
+	apiResponse.DislikeCount = n
+	apiResponse.TweetId = tweetId
 }
-
-*/

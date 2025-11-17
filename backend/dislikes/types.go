@@ -6,11 +6,11 @@ type DislikeRecord struct {
 }
 
 type TweetRecord struct {
-	OwnerId   string                   `bson:"ownerId" datastore:"ownerId"`
-	TweetId   string                   `bson:"tweetId" datastore:"tweetId"`
-	DislikeBy map[string]DislikeRecord `bson:"dislikedBy" datastore:"dislikedBy"`
-	CreatedAt int                      `bson:"createdAt,$date" datastore:"createdAt"`
-	UpdatedAt int                      `bson:"updatedAt,$date" datastore:"updatedAt"`
+	OwnerId   string          `bson:"ownerId" datastore:"ownerId"`
+	TweetId   string          `bson:"tweetId" datastore:"tweetId"`
+	DislikeBy []DislikeRecord `bson:"dislikedBy" datastore:"dislikedBy"`
+	CreatedAt int             `bson:"createdAt,$date" datastore:"createdAt"`
+	UpdatedAt int             `bson:"updatedAt,$date" datastore:"updatedAt"`
 }
 
 type Config struct {
@@ -19,4 +19,10 @@ type Config struct {
 	Password         string `bson:"password" datastore:"password"`
 	HostName         string `bson:"hostname" datastore:"hostname"`
 	Port             int    `bson:"port" datastore:"port"`
+}
+
+type APIResponse struct {
+	DislikeCount int    `json:"dislikeCount"`
+	TweetId      string `json:"tweetId"`
+	UserDislike  bool   `json:"userDislike"`
 }

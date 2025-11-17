@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"time"
 )
 
@@ -48,31 +49,29 @@ func (writer FileDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *htt
 
 	timeStamp := int(time.Now().Unix())
 	if _, ok := fileDataObj[tweetId]; !ok {
-		fileDataObj[tweetId] = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
+		fileDataObj[tweetId] = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make([]DislikeRecord, 0), CreatedAt: timeStamp, UpdatedAt: timeStamp}
 	}
 
 	tweetRecord := fileDataObj[tweetId]
 	tweetRecord.UpdatedAt = timeStamp
 	fileDataObj[tweetId] = tweetRecord
-	dislikeByMap := tweetRecord.DislikeBy
-	if _, ok := dislikeByMap[profileId]; !ok {
-		dislikeByMap[profileId] = DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp}
+	dislikeByList := tweetRecord.DislikeBy
+
+	index := slices.IndexFunc(dislikeByList, func(rec DislikeRecord) bool {
+		return rec.OwnerId == profileId
+	})
+
+	if index == -1 {
+		dislikeByList = append(dislikeByList, DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp})
 	} else {
-		delete(dislikeByMap, profileId)
+		dislikeByList = append(dislikeByList[:index], dislikeByList[index+1:]...)
+		index = -1
 	}
 
 	fileDataStr, _ := json.MarshalIndent(fileDataObj, "", " ")
 	os.WriteFile(writer.Path, fileDataStr, os.ModeAppend|os.ModePerm)
 
-	outputObj["dislikeCount"] = len(fileDataObj[tweetId].DislikeBy)
-	outputObj["tweetId"] = tweetId
-	outputObj["userDislike"] = false
-
-	if _, ok := fileDataObj[tweetId].DislikeBy[profileId]; ok {
-		outputObj["userDislike"] = true
-	}
-
-	parseDataResponse(&outputObj, &tweetRecord, profileId)
+	parseDataResponse(&outputObj, &tweetRecord, index)
 }
 
 func (writer FileDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *http.Request) {
@@ -98,11 +97,10 @@ func (writer FileDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *http
 		log.Fatal(outputObj)
 	}
 
-	outputObj["dislikeCount"] = len(fileDataObj[tweetId].DislikeBy)
-	outputObj["tweetId"] = tweetId
-	outputObj["userDislike"] = false
+	tweetRecord := fileDataObj[tweetId]
+	index := slices.IndexFunc(tweetRecord.DislikeBy, func(rec DislikeRecord) bool {
+		return rec.OwnerId == profileId
+	})
 
-	if _, ok := fileDataObj[tweetId].DislikeBy[profileId]; ok {
-		outputObj["userDislike"] = true
-	}
+	parseDataResponse(&outputObj, &tweetRecord, index)
 }

@@ -12,12 +12,12 @@ type DislikeWriter interface {
 /*
 UTILS
 */
-func parseDataResponse(outputObj *map[string]any, tweetRecord *TweetRecord, profileId string) {
+func parseDataResponse(outputObj *map[string]any, tweetRecord *TweetRecord, profileIndex int) {
 	(*outputObj)["dislikeCount"] = len(tweetRecord.DislikeBy)
 	(*outputObj)["tweetId"] = tweetRecord.TweetId
 	(*outputObj)["userDislike"] = false
 
-	if _, ok := tweetRecord.DislikeBy[profileId]; ok {
+	if profileIndex == -1 {
 		(*outputObj)["userDislike"] = true
 	}
 }

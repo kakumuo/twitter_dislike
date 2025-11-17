@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -54,7 +55,7 @@ func (writer MongoDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *ht
 	timeStamp := int(time.Now().Unix())
 
 	if err == mongo.ErrNoDocuments {
-		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
+		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make([]DislikeRecord, 0), CreatedAt: timeStamp, UpdatedAt: timeStamp}
 	} else if err != nil {
 		log.Fatal("Uanble to query document:", err.Error())
 	} else {
@@ -62,11 +63,17 @@ func (writer MongoDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *ht
 	}
 
 	tweetRecord.UpdatedAt = timeStamp
-	dislikeByMap := tweetRecord.DislikeBy
-	if _, ok := dislikeByMap[profileId]; !ok {
-		dislikeByMap[profileId] = DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp}
+	dislikeByList := tweetRecord.DislikeBy
+
+	index := slices.IndexFunc(dislikeByList, func(rec DislikeRecord) bool {
+		return rec.OwnerId == profileId
+	})
+
+	if index == -1 {
+		dislikeByList = append(dislikeByList, DislikeRecord{OwnerId: profileId, UpdatedAt: timeStamp})
 	} else {
-		delete(dislikeByMap, profileId)
+		dislikeByList = append(dislikeByList[:index], dislikeByList[index+1:]...)
+		index = -1
 	}
 
 	filter = bson.D{{"tweetId", tweetId}}
@@ -81,7 +88,7 @@ func (writer MongoDislikeWriter) HandlePostDislikes(w http.ResponseWriter, r *ht
 	log.Printf("Number of documents updated: %v\n", result.ModifiedCount)
 	log.Printf("Number of documents upserted: %v\n", result.UpsertedCount)
 
-	parseDataResponse(&outputObj, &tweetRecord, profileId)
+	parseDataResponse(&outputObj, &tweetRecord, index)
 }
 
 func (writer MongoDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *http.Request) {
@@ -103,12 +110,16 @@ func (writer MongoDislikeWriter) HandleGetDislikes(w http.ResponseWriter, r *htt
 	timeStamp := int(time.Now().Unix())
 
 	if err == mongo.ErrNoDocuments {
-		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make(map[string]DislikeRecord), CreatedAt: timeStamp, UpdatedAt: timeStamp}
+		tweetRecord = TweetRecord{OwnerId: ownerId, TweetId: tweetId, DislikeBy: make([]DislikeRecord, 0), CreatedAt: timeStamp, UpdatedAt: timeStamp}
 	} else if err != nil {
 		log.Fatal("Uanble to query document:", err.Error())
 	} else {
 		cursor.Decode(&tweetRecord)
 	}
 
-	parseDataResponse(&outputObj, &tweetRecord, profileId)
+	index := slices.IndexFunc(tweetRecord.DislikeBy, func(rec DislikeRecord) bool {
+		return rec.OwnerId == profileId
+	})
+
+	parseDataResponse(&outputObj, &tweetRecord, index)
 }
