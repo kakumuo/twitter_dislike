@@ -22,11 +22,11 @@ async function handleAPIGet(message:APIMessage){
     const query = Object.entries(message.data).map(([key, val]) => `${key}=${val}`).join("&")
     const path = `${BACKEND_PROTO}://${BACKEND_ENDPOINT}?${query}`
     
-    console.debug("Sending GET to:", path)
+    // console.debug("Sending GET to:", path)
 
     const resp  = await fetch(path, {method: "get"})	
     const respJson  = await resp.json()
-    console.debug("API Response: ", respJson)   
+    // console.debug("API Response: ", respJson)   
     
     return respJson
 }
@@ -36,11 +36,11 @@ async function handleAPIPost(message:APIMessage){
     const query = Object.entries(message.data).map(([key, val]) => `${key}=${val}`).join("&")
     const path = `${BACKEND_PROTO}://${BACKEND_ENDPOINT}?${query}`
     
-    console.debug("Sending POST to:", path)
+    // console.debug("Sending POST to:", path)
 
     const resp  = await fetch(path, {method: "post"})	
     const respJson  = await resp.json()
-    console.debug("API Response: ", respJson)
+    // console.debug("API Response: ", respJson)
     
     return respJson
 }

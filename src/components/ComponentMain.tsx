@@ -42,7 +42,7 @@ export function DislikeButton(props:{tweetInfo:TweetInfo}) {
 	}
 
 	React.useEffect(() => {
-		console.debug("Creating component for: ", props.tweetInfo)
+		// console.debug("Creating component for: ", props.tweetInfo)
 		handleTweetDislikes('get')
 	}, [])
 

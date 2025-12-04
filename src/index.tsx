@@ -3,9 +3,12 @@ import { createRoot } from "react-dom/client";
 import {DislikeButton} from "./components/ComponentMain";
 
 
-const SELECT_TIMELINE_PARENT = 'css-175oi2r'
-const timelineParent = document.querySelector<HTMLDivElement>(`div[class*="${SELECT_TIMELINE_PARENT}"`)
-const timelineButtonMap:WeakMap<HTMLDivElement, HTMLDivElement> = new WeakMap()
+// const SELECT_TIMELINE_PARENT = 'div[class*="css-175oi2r"]'
+const SELECT_TIMELINE_PARENT = 'div[id="react-root"]'
+const timelineParent = document.querySelector<HTMLDivElement>(SELECT_TIMELINE_PARENT)
+
+// TODO: remove later
+console.debug("Content script loaded, ", timelineParent)
 
 const observer = new MutationObserver((mutationsList) => {
   mutationsList.forEach((mutation) => {
@@ -16,7 +19,7 @@ const observer = new MutationObserver((mutationsList) => {
             
         if(targetLikeButton && element.classList.contains("css-175oi2r") && element.getAttribute("data-testid") == "cellInnerDiv") {
             const tweetInfo = getTweetInfo(element)
-            console.debug(element)
+            // console.debug(element)
             addDislikeButton(targetLikeButton, tweetInfo)
         }
     });
